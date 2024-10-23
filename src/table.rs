@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result, Error};
 use std::collections::HashMap;
+use std::cmp::Ordering;
 use csv;
 
 #[derive(Debug, PartialEq)]
@@ -9,19 +10,19 @@ pub(crate) struct Table {
 }
 
 #[derive(Debug, PartialEq)]
-pub(crate) struct TableIndices {
-    column_indices: HashMap<String, Index>
+pub(crate) struct TableIndices<'a> {
+    column_indices: HashMap<String, Index<'a>>
 }
 
 #[derive(Debug, PartialEq)]
-pub(crate) struct Index {
+pub(crate) struct Index<'a> {
     column_name: String,
-    sorted_column_values: Vec<ValueInRow>
+    sorted_column_values: Vec<ValueInRow<'a>>
 }
 
 #[derive(Debug, PartialEq)]
-pub(crate) struct ValueInRow {
-    value: Value,
+pub(crate) struct ValueInRow<'a> {
+    value: &'a Value,
     row_index: usize
 }
 
@@ -42,16 +43,49 @@ pub(crate) struct Row {
     fields: Vec<Value>
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Value {
     Integer(u64),
     Text(String)
 }
 
-impl TableIndices {
+impl Ord for Value {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (Value::Integer(x), Value::Integer(y)) => x.cmp(y),
+            (Value::Text(x), Value::Text(y)) => x.cmp(y),
+            (x, y) => format!("{:?}", x).cmp(&format!("{:?}", y))
+        }
+    }
+}
+
+impl PartialOrd for Value {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl TableIndices<'_> {
     pub(crate) fn build_for(table: &Table) -> Result<TableIndices, Error> {
+        let mut column_indices: HashMap<String, Index> = HashMap::new();
+        for (column_index, column) in table.columns.iter().enumerate() {
+            let column_name = column.name.to_string();
+            let mut column_values: Vec<ValueInRow> = Vec::new();
+            for (row_index, row) in table.rows.iter().enumerate() {
+                let column_value = row.fields.get(column_index).ok_or_else(|| anyhow!("Row {:?} does not have column {:?}", &row, &column_name))?;
+                column_values.push(ValueInRow {
+                    value: column_value,
+                    row_index
+                });
+            }
+            column_values.sort_by(|x, y| x.value.cmp(y.value));
+            column_indices.insert(column_name.to_string(), Index {
+                column_name,
+                sorted_column_values: column_values
+            });
+        }
         Ok(TableIndices {
-            column_indices: HashMap::new()
+            column_indices
         })
     }
 }
@@ -170,31 +204,35 @@ ccc,2,11"#;
         let mut reader = ReaderBuilder::new().from_reader(Cursor::new(input));
         let table = Table::load_from(&mut reader).unwrap();
         let indices = TableIndices::build_for(&table).unwrap();
+        let aaa = Value::Text("aaa".to_string());
+        let bbb = Value::Text("bbb".to_string());
+        let ccc = Value::Text("ccc".to_string());
+        let b = Value::Text("b".to_string());
         assert_eq!(indices, TableIndices {
             column_indices: {
                 let mut columns_indices = HashMap::new();
                 columns_indices.insert("column1".to_string(), Index {
                     column_name: "column1".to_string(),
                     sorted_column_values: vec![
-                        ValueInRow { value: Value::Text("aaa".to_string()), row_index: 1 },
-                        ValueInRow { value: Value::Text("bbb".to_string()), row_index: 0 },
-                        ValueInRow { value: Value::Text("ccc".to_string()), row_index: 2 }
+                        ValueInRow { value: &aaa, row_index: 1 },
+                        ValueInRow { value: &bbb, row_index: 0 },
+                        ValueInRow { value: &ccc, row_index: 2 }
                     ]
                 });
                 columns_indices.insert("column2".to_string(), Index {
                     column_name: "column2".to_string(),
                     sorted_column_values: vec![
-                        ValueInRow { value: Value::Integer(1), row_index: 1 },
-                        ValueInRow { value: Value::Integer(2), row_index: 2 },
-                        ValueInRow { value: Value::Integer(3), row_index: 0 }
+                        ValueInRow { value: &Value::Integer(1), row_index: 1 },
+                        ValueInRow { value: &Value::Integer(2), row_index: 2 },
+                        ValueInRow { value: &Value::Integer(3), row_index: 0 }
                     ]
                 });
                 columns_indices.insert("column3".to_string(), Index {
                     column_name: "column3".to_string(),
                     sorted_column_values: vec![
-                        ValueInRow { value: Value::Text("b".to_string()), row_index: 0 },
-                        ValueInRow { value: Value::Integer(10), row_index: 1 },
-                        ValueInRow { value: Value::Integer(11), row_index: 2 }
+                        ValueInRow { value: &Value::Integer(10), row_index: 1 },
+                        ValueInRow { value: &Value::Integer(11), row_index: 2 },
+                        ValueInRow { value: &b, row_index: 0 },
                     ]
                 });
                 columns_indices
