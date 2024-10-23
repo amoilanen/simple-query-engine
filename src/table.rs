@@ -1,10 +1,28 @@
 use anyhow::{anyhow, Result, Error};
-use csv::{self, StringRecord};
+use std::collections::HashMap;
+use csv;
 
 #[derive(Debug, PartialEq)]
 pub(crate) struct Table {
     columns: Vec<Column>,
     rows: Vec<Row>
+}
+
+#[derive(Debug, PartialEq)]
+pub(crate) struct TableIndices {
+    column_indices: HashMap<String, Index>
+}
+
+#[derive(Debug, PartialEq)]
+pub(crate) struct Index {
+    column_name: String,
+    sorted_column_values: Vec<ValueInRow>
+}
+
+#[derive(Debug, PartialEq)]
+pub(crate) struct ValueInRow {
+    value: Value,
+    row_index: usize
 }
 
 #[derive(Debug, PartialEq)]
@@ -21,18 +39,26 @@ pub(crate) enum ColumnType {
 
 #[derive(Debug, PartialEq)]
 pub(crate) struct Row {
-    fields: Vec<Field>
+    fields: Vec<Value>
 }
 
 #[derive(Debug, PartialEq)]
-pub(crate) enum Field {
+pub(crate) enum Value {
     Integer(u64),
     Text(String)
 }
 
+impl TableIndices {
+    pub(crate) fn build_for(table: &Table) -> Result<TableIndices, Error> {
+        Ok(TableIndices {
+            column_indices: HashMap::new()
+        })
+    }
+}
+
 impl Table {
 
-    pub(crate) fn from<R: std::io::Read>(reader: &mut csv::Reader<R>) -> Result<Table, Error> {
+    pub(crate) fn load_from<R: std::io::Read>(reader: &mut csv::Reader<R>) -> Result<Table, Error> {
         let rows = Table::parse_rows(reader)?;
         let columns = Table::parse_columns(reader, &rows)?;
         Ok(Table {
@@ -44,7 +70,7 @@ impl Table {
     fn parse_rows<R: std::io::Read>(reader: &mut csv::Reader<R>) -> Result<Vec<Row>, Error> {
         let mut rows: Vec<Row> = Vec::new();
         for record in reader.records() {
-            let mut fields: Vec<Field> = Vec::new();
+            let mut fields: Vec<Value> = Vec::new();
             for column in record?.into_iter() {
                 let field = Table::parse_field(column.to_string())?;
                 fields.push(field);
@@ -56,11 +82,11 @@ impl Table {
         Ok(rows)
     }
 
-    fn parse_field(value: String) -> anyhow::Result<Field, anyhow::Error> {
+    fn parse_field(value: String) -> anyhow::Result<Value, anyhow::Error> {
         if value.chars().all(|char| char.is_digit(10)) {
-            Ok(Field::Integer(value.parse()?))
+            Ok(Value::Integer(value.parse()?))
         } else {
-            Ok(Field::Text(value))
+            Ok(Value::Text(value))
         }
     }
 
@@ -68,14 +94,14 @@ impl Table {
         let headers: Vec<String> = reader.headers()?.into_iter().map(|header| header.to_string()).collect();
         let mut columns: Vec<Column> = Vec::new();
         for (index, header) in headers.into_iter().enumerate() {
-            let mut column_values: Vec<&Field> = Vec::new();
+            let mut column_values: Vec<&Value> = Vec::new();
             for row in rows.iter() {
                 let row_field = row.fields.get(index).ok_or_else(|| anyhow!("Row {:?} does not have column {:?}", &row, &header))?;
                 column_values.push(row_field);
             }
             let is_integer_column = column_values.into_iter().all(|field| match field {
-                Field::Integer(_) => true,
-                Field::Text(_) => false
+                Value::Integer(_) => true,
+                Value::Text(_) => false
             });
             let column_type = if is_integer_column {
                 ColumnType::Integer
@@ -99,13 +125,13 @@ mod test {
     use std::io::Cursor;
 
     #[test]
-    fn should_parse_table_from_csv() {
+    fn should_load_table_from_csv() {
         let input = r#"column1,column2,column3
+bbb,3,b
 aaa,1,10
-bbb,2,b
-ccc,3,11"#;
+ccc,2,11"#;
         let mut reader = ReaderBuilder::new().from_reader(Cursor::new(input));
-        let table = Table::from(&mut reader).unwrap();
+        let table = Table::load_from(&mut reader).unwrap();
         assert_eq!(table, Table {
             columns: vec![
                 Column {
@@ -123,15 +149,56 @@ ccc,3,11"#;
             ],
             rows: vec![
                 Row {
-                    fields: vec![Field::Text("aaa".to_string()), Field::Integer(1), Field::Integer(10)]
+                    fields: vec![Value::Text("bbb".to_string()), Value::Integer(3), Value::Text("b".to_string())]
                 },
                 Row {
-                    fields: vec![Field::Text("bbb".to_string()), Field::Integer(2), Field::Text("b".to_string())]
+                    fields: vec![Value::Text("aaa".to_string()), Value::Integer(1), Value::Integer(10)]
                 },
                 Row {
-                    fields: vec![Field::Text("ccc".to_string()), Field::Integer(3), Field::Integer(11)]
+                    fields: vec![Value::Text("ccc".to_string()), Value::Integer(2), Value::Integer(11)]
                 }
             ]
+        })
+    }
+
+    #[test]
+    fn should_build_indices_for_table() {
+        let input = r#"column1,column2,column3
+bbb,3,b
+aaa,1,10
+ccc,2,11"#;
+        let mut reader = ReaderBuilder::new().from_reader(Cursor::new(input));
+        let table = Table::load_from(&mut reader).unwrap();
+        let indices = TableIndices::build_for(&table).unwrap();
+        assert_eq!(indices, TableIndices {
+            column_indices: {
+                let mut columns_indices = HashMap::new();
+                columns_indices.insert("column1".to_string(), Index {
+                    column_name: "column1".to_string(),
+                    sorted_column_values: vec![
+                        ValueInRow { value: Value::Text("aaa".to_string()), row_index: 1 },
+                        ValueInRow { value: Value::Text("bbb".to_string()), row_index: 0 },
+                        ValueInRow { value: Value::Text("ccc".to_string()), row_index: 2 }
+                    ]
+                });
+                columns_indices.insert("column2".to_string(), Index {
+                    column_name: "column2".to_string(),
+                    sorted_column_values: vec![
+                        ValueInRow { value: Value::Integer(1), row_index: 1 },
+                        ValueInRow { value: Value::Integer(2), row_index: 2 },
+                        ValueInRow { value: Value::Integer(3), row_index: 0 }
+                    ]
+                });
+                columns_indices.insert("column3".to_string(), Index {
+                    column_name: "column3".to_string(),
+                    sorted_column_values: vec![
+                        ValueInRow { value: Value::Text("b".to_string()), row_index: 0 },
+                        ValueInRow { value: Value::Integer(10), row_index: 1 },
+                        ValueInRow { value: Value::Integer(11), row_index: 2 }
+                    ]
+                });
+                columns_indices
+            }
         })
     }
 }
