@@ -2,6 +2,7 @@ use anyhow::{Result, Error};
 use std::fs::File;
 use table::{Table, TableIndices};
 
+mod value;
 mod table;
 mod query;
 

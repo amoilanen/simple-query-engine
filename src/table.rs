@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result, Error};
 use std::collections::HashMap;
-use std::cmp::Ordering;
 use csv;
+use crate::value::Value;
 
 #[derive(Debug, PartialEq)]
 pub(crate) struct Table {
@@ -41,28 +41,6 @@ pub(crate) enum ColumnType {
 #[derive(Debug, PartialEq)]
 pub(crate) struct Row {
     fields: Vec<Value>
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) enum Value {
-    Integer(u64),
-    Text(String)
-}
-
-impl Ord for Value {
-    fn cmp(&self, other: &Self) -> Ordering {
-        match (self, other) {
-            (Value::Integer(x), Value::Integer(y)) => x.cmp(y),
-            (Value::Text(x), Value::Text(y)) => x.cmp(y),
-            (x, y) => format!("{:?}", x).cmp(&format!("{:?}", y))
-        }
-    }
-}
-
-impl PartialOrd for Value {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
 }
 
 impl TableIndices<'_> {
@@ -106,7 +84,7 @@ impl Table {
         for record in reader.records() {
             let mut fields: Vec<Value> = Vec::new();
             for column in record?.into_iter() {
-                let field = Table::parse_field(column.to_string())?;
+                let field = Value::parse_value(column.to_string())?;
                 fields.push(field);
             }
             rows.push(Row {
@@ -114,14 +92,6 @@ impl Table {
             })
         }
         Ok(rows)
-    }
-
-    fn parse_field(value: String) -> anyhow::Result<Value, anyhow::Error> {
-        if value.chars().all(|char| char.is_digit(10)) {
-            Ok(Value::Integer(value.parse()?))
-        } else {
-            Ok(Value::Text(value))
-        }
     }
 
     fn parse_columns<R: std::io::Read>(reader: &mut csv::Reader<R>, rows: &Vec<Row>) -> Result<Vec<Column>, Error> {
