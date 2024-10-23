@@ -1,4 +1,4 @@
-﻿City Name,Population Size,Country,Area (km²),Population Density (people/km²),Dominant Language
+﻿city_name,population_size,country,area_km2,population_density_per_km2,dominant_language
 Berlin,3644826,Germany,891.8,4087,German
 Madrid,3266126,Spain,604.3,5402,Spanish
 Rome,2873000,Italy,1287.4,2232,Italian
