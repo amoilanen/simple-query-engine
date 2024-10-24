@@ -4,6 +4,12 @@ use csv;
 use crate::value::Value;
 
 #[derive(Debug, PartialEq)]
+pub struct IndexedTable<'a> {
+    table: &'a Table,
+    indices: TableIndices<'a>
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Table {
     columns: Vec<Column>,
     rows: Vec<Row>
@@ -69,6 +75,14 @@ impl TableIndices<'_> {
 }
 
 impl Table {
+
+    pub fn build_indices<'a>(&'a self) -> Result<IndexedTable<'a>, Error> {
+        let indices = TableIndices::build_for(&self)?;
+        Ok(IndexedTable {
+            table: &self,
+            indices
+        })
+    }
 
     pub fn load_from<R: std::io::Read>(reader: &mut csv::Reader<R>) -> Result<Table, Error> {
         let rows = Table::parse_rows(reader)?;
