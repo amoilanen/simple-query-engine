@@ -1,10 +1,7 @@
 use anyhow::{Result, Error};
 use std::fs::File;
-use table::{Table, TableIndices};
-
-mod value;
-mod table;
-mod query;
+use simple_query_engine::{ value, table, query, query_engine };
+use simple_query_engine::table::{Table, TableIndices};
 
 fn main() -> Result<(), Error> {
     let file_path = "./examples/data/input.csv";

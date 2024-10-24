@@ -4,13 +4,13 @@ use anyhow::{anyhow, Context, Error, Result};
 use crate::value::Value;
 
 #[derive(Debug, PartialEq)]
-struct Query {
+pub struct Query {
     column_names: Vec<String>,
     filter: Option<Filter>
 }
 
 impl Query {
-    pub(crate) fn parse(input: &str) -> Result<Query, Error> {
+    pub fn parse(input: &str) -> Result<Query, Error> {
         let tokens: Vec<&str> = input.split_whitespace().collect();
         let (query, final_position) = Query::parse_query(&tokens, 0)?;
         if final_position == tokens.len() {

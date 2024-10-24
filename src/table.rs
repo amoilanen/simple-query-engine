@@ -4,47 +4,47 @@ use csv;
 use crate::value::Value;
 
 #[derive(Debug, PartialEq)]
-pub(crate) struct Table {
+pub struct Table {
     columns: Vec<Column>,
     rows: Vec<Row>
 }
 
 #[derive(Debug, PartialEq)]
-pub(crate) struct TableIndices<'a> {
+pub struct TableIndices<'a> {
     column_indices: HashMap<String, Index<'a>>
 }
 
 #[derive(Debug, PartialEq)]
-pub(crate) struct Index<'a> {
+pub struct Index<'a> {
     column_name: String,
     sorted_column_values: Vec<ValueInRow<'a>>
 }
 
 #[derive(Debug, PartialEq)]
-pub(crate) struct ValueInRow<'a> {
+pub struct ValueInRow<'a> {
     value: &'a Value,
     row_index: usize
 }
 
 #[derive(Debug, PartialEq)]
-pub(crate) struct Column {
+pub struct Column {
     name: String,
     column_type: ColumnType
 }
 
 #[derive(Debug, PartialEq)]
-pub(crate) enum ColumnType {
+pub enum ColumnType {
     Integer,
     Text
 }
 
 #[derive(Debug, PartialEq)]
-pub(crate) struct Row {
+pub struct Row {
     fields: Vec<Value>
 }
 
 impl TableIndices<'_> {
-    pub(crate) fn build_for(table: &Table) -> Result<TableIndices, Error> {
+    pub fn build_for(table: &Table) -> Result<TableIndices, Error> {
         let mut column_indices: HashMap<String, Index> = HashMap::new();
         for (column_index, column) in table.columns.iter().enumerate() {
             let column_name = column.name.to_string();
@@ -70,7 +70,7 @@ impl TableIndices<'_> {
 
 impl Table {
 
-    pub(crate) fn load_from<R: std::io::Read>(reader: &mut csv::Reader<R>) -> Result<Table, Error> {
+    pub fn load_from<R: std::io::Read>(reader: &mut csv::Reader<R>) -> Result<Table, Error> {
         let rows = Table::parse_rows(reader)?;
         let columns = Table::parse_columns(reader, &rows)?;
         Ok(Table {
