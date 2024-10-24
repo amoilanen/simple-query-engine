@@ -5,37 +5,37 @@ use crate::value::Value;
 
 #[derive(Debug, PartialEq)]
 pub struct IndexedTable<'a> {
-    table: &'a Table,
-    indices: TableIndices<'a>
+    pub underlying: &'a Table,
+    pub indices: TableIndices<'a>
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Table {
-    columns: Vec<Column>,
-    rows: Vec<Row>
+    pub columns: Vec<Column>,
+    pub rows: Vec<Row>
 }
 
 #[derive(Debug, PartialEq)]
 pub struct TableIndices<'a> {
-    column_indices: HashMap<String, Index<'a>>
+    pub column_indices: HashMap<String, Index<'a>>
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Index<'a> {
-    column_name: String,
-    sorted_column_values: Vec<ValueInRow<'a>>
+    pub column_name: String,
+    pub sorted_column_values: Vec<ValueInRow<'a>>
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ValueInRow<'a> {
-    value: &'a Value,
-    row_index: usize
+    pub value: &'a Value,
+    pub row_index: usize
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Column {
-    name: String,
-    column_type: ColumnType
+    pub name: String,
+    pub column_type: ColumnType
 }
 
 #[derive(Debug, PartialEq)]
@@ -46,7 +46,7 @@ pub enum ColumnType {
 
 #[derive(Debug, PartialEq)]
 pub struct Row {
-    fields: Vec<Value>
+    pub fields: Vec<Value>
 }
 
 impl TableIndices<'_> {
@@ -79,7 +79,7 @@ impl Table {
     pub fn build_indices<'a>(&'a self) -> Result<IndexedTable<'a>, Error> {
         let indices = TableIndices::build_for(&self)?;
         Ok(IndexedTable {
-            table: &self,
+            underlying: &self,
             indices
         })
     }

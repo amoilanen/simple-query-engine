@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub(crate) enum Value {
     Integer(u64),
     Text(String)

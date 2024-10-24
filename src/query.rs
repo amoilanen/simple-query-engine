@@ -5,8 +5,8 @@ use crate::value::Value;
 
 #[derive(Debug, PartialEq)]
 pub struct Query {
-    column_names: Vec<String>,
-    filter: Option<Filter>
+    pub column_names: Vec<String>,
+    pub filter: Option<Filter>
 }
 
 impl Query {
@@ -87,14 +87,14 @@ impl Query {
 }
 
 #[derive(Debug, PartialEq)]
-struct Filter {
-    column_name: String,
-    value: Value,
-    filter_type: FilterType
+pub struct Filter {
+    pub column_name: String,
+    pub value: Value,
+    pub filter_type: FilterType
 }
 
 #[derive(Debug, PartialEq)]
-enum FilterType {
+pub enum FilterType {
     Greater,
     Equal
 }
