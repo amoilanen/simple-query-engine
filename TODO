@@ -2,10 +2,12 @@
   - Load CSV into memory
   - Recognize column types
   - Create indices and auxiliary data structures: every row gets assigned an id, map "row id" -> "row", for every column an index (ordered list?) "column value" -> "row id"
-- Parse the query into a struct containing the project columns and sorting columns
+- Parse the query into a struct containing the project columns and filtering column
 - Query the data from the CSV loaded into memory and print output
   - Implement error handling/add tests for the case when the columns used in the query do not exist
   - Support projection by one or several columns
-  - Support filtering by a single column > and <
+  - Support filtering by a single column >
   - Support filtering by a single column =
 - Add command line interface to load the data and then run a query
+- Document how to run and test the engine
+- Answer the questions in the README.md
