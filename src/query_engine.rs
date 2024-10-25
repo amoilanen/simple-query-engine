@@ -6,6 +6,11 @@ use crate::query::{FilterType, Filter, Query};
 use crate::value::Value;
 
 #[derive(Debug, PartialEq)]
+pub struct ResultSet {
+    pub rows: Vec<ResultSetRow>
+}
+
+#[derive(Debug, PartialEq)]
 pub struct ResultSetRow {
     pub fields: Vec<Value>
 }
@@ -16,11 +21,6 @@ impl fmt::Display for ResultSetRow {
             .map(|field| format!("{}", field)).collect();
         write!(f, "{}", formatted_fields.join(","))
     }
-}
-
-#[derive(Debug, PartialEq)]
-pub struct ResultSet {
-    pub rows: Vec<ResultSetRow>
 }
 
 pub fn execute(query: &Query, table: &IndexedTable) -> Result<ResultSet, Error> {

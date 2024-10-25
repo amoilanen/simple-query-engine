@@ -5,47 +5,47 @@ use crate::value::Value;
 
 #[derive(Debug, PartialEq)]
 pub struct IndexedTable<'a> {
-    pub underlying: &'a Table,
-    pub indices: TableIndices<'a>
+    pub(crate) underlying: &'a Table,
+    pub(crate) indices: TableIndices<'a>
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Table {
-    pub columns: Vec<Column>,
-    pub rows: Vec<Row>
+    pub(crate) columns: Vec<Column>,
+    pub(crate) rows: Vec<Row>
 }
 
 #[derive(Debug, PartialEq)]
-pub struct TableIndices<'a> {
-    pub column_indices: HashMap<String, Index<'a>>
+pub(crate) struct TableIndices<'a> {
+    pub(crate) column_indices: HashMap<String, Index<'a>>
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Index<'a> {
-    pub column_name: String,
-    pub sorted_column_values: Vec<ValueInRow<'a>>
+pub(crate) struct Index<'a> {
+    pub(crate) column_name: String,
+    pub(crate) sorted_column_values: Vec<ValueInRow<'a>>
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct ValueInRow<'a> {
-    pub value: &'a Value,
-    pub row_index: usize
+pub(crate) struct ValueInRow<'a> {
+    pub(crate) value: &'a Value,
+    pub(crate) row_index: usize
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Column {
-    pub name: String,
-    pub column_type: ColumnType
+pub(crate) struct Column {
+    pub(crate) name: String,
+    pub(crate) column_type: ColumnType
 }
 
 #[derive(Debug, PartialEq)]
-pub enum ColumnType {
+pub(crate) enum ColumnType {
     Integer,
     Text
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Row {
+pub(crate) struct Row {
     pub fields: Vec<Value>
 }
 

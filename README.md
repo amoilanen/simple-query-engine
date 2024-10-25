@@ -15,6 +15,7 @@ simple-query-engine {path_to_csv_file}
 ```
 
 Queries can be typed in the open interactive REPL session.
+To exit the REPL type in "exit".
 
 For example using the CSV file in the `examples/data` directory:
 
@@ -45,3 +46,11 @@ cargo test
 ```bash
 cargo run -- ./examples/data/input.csv
 ```
+
+## Questions
+
+* What were some of the tradeoffs you made when building this and why were these acceptable tradeoffs?
+* Given more time, what improvements or optimizations would you want to add? When would you add them?
+* What changes are needed to accommodate changes to support other data types, multiple filters, or ordering of results?
+* What changes are needed to process extremely large datasets
+* What do you still need to do to make this code production ready?
