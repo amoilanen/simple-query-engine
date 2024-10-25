@@ -1,2 +1,0 @@
-- Revisit which structs and functions should be public and use "pub use" for exposing them
-- Answer the questions in the README.md
