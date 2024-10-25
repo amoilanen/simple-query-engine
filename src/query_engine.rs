@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
-use anyhow::{anyhow, Result, Error};
-use crate::table::IndexedTable;
-use crate::query::{FilterType, Query};
+use anyhow::{Result, Error};
+use crate::table::{IndexedTable, Index};
+use crate::query::{FilterType, Filter, Query};
 use crate::value::Value;
 
 #[derive(Debug, PartialEq)]
@@ -14,86 +14,100 @@ pub struct ResultSet {
     rows: Vec<ResultSetRow>
 }
 
-//TODO: Re-factor
 pub fn execute(query: &Query, table: &IndexedTable) -> Result<ResultSet, Error> {
-    //TODO: Split a function to find the row ids
-    let mut row_ids: Vec<usize> = Vec::new();
-    if let Some(filter) = &query.filter {
-        let filter_column_ord = table.underlying.columns.iter()
-            .position(|column| column.name == filter.column_name)
-            .ok_or_else(|| anyhow!("Cannot filter by column {}, it does not exist in the table, existing columns {}",
-                filter.column_name,
-                table.underlying.column_names().join(", "))
-            )?;
-        if let Some(column_index) = table.indices.column_indices.get(&filter.column_name) {
-            match filter.filter_type {
-                FilterType::Greater => {
-                    let found_idx = match column_index.sorted_column_values
-                        .binary_search_by(|value_in_row| {
-                           if *value_in_row.value <= filter.value {
-                               Ordering::Less
-                           } else {
-                               Ordering::Greater
-                           }
-                        }) {
-                           Err(idx) =>
-                               if idx < column_index.sorted_column_values.len() {
-                                   Some(idx)
-                               } else {
-                                   None
-                               }
-                           _ => None
-                        };
-
-                    if let Some(first_idx_greater_than) = found_idx {
-                        row_ids = column_index.sorted_column_values[first_idx_greater_than..].iter().map(|value_in_row| value_in_row.row_index).collect();
-                    }
-                },
-                FilterType::Equal => {
-                    if let Some(found_row) = column_index.sorted_column_values
-                        .binary_search_by_key(&&filter.value, |value_in_row| value_in_row.value).ok()
-                        .and_then(|idx| column_index.sorted_column_values.get(idx)) {
-                        row_ids.push(found_row.row_index)
-                    }
-                }
-            };
-        } else {
-            //No index found on the filtering column => scan all rows and filter all rows inefficiently
-            for (row_id, row) in table.underlying.rows.iter().enumerate() {
-                let is_row_matched_by_filter = match filter.filter_type {
-                    FilterType::Greater => row.fields[filter_column_ord] > filter.value,
-                    FilterType::Equal => row.fields[filter_column_ord] == filter.value
-                };
-                if is_row_matched_by_filter {
-                    row_ids.push(row_id);
-                }
-            }
-        }
+    let row_ids = if let Some(filter) = &query.filter {
+        apply_filter(table, filter)?
     } else {
-        // No filter: return all rows
-        row_ids = (0..table.underlying.rows.len()).collect();
-    }
+        (0..table.underlying.rows.len()).collect()
+    };
+    project_rows(table, &row_ids, &query.column_names)
+}
 
-    //TODO: Split a function to project the found row_ids
-    let mut projection_column_ords: Vec<usize> = Vec::new();
-    for projection_column_name in query.column_names.iter() {
-        let projection_column_ord = table.underlying.columns.iter()
-            .position(|column| column.name == projection_column_name.to_string())
-            .ok_or_else(|| anyhow!("Cannot project column {}, it does not exist in the table, existing columns {}",
-                projection_column_name,
-                table.underlying.column_names().join(", "))
-            )?;
-        projection_column_ords.push(projection_column_ord);
+fn apply_filter(table: &IndexedTable, filter: &Filter) -> Result<Vec<usize>, Error> {
+    if let Some(column_index) = table.indices.column_indices.get(&filter.column_name) {
+        filter_using_index(filter, column_index)
+    } else {
+        filter_by_scanning(table, filter)
+    }
+}
+
+fn project_rows(table: &IndexedTable, row_ids: &Vec<usize>, column_names: &Vec<String>) -> Result<ResultSet, Error> {
+    let mut column_positions: Vec<usize> = Vec::new();
+    for column_name in column_names.iter() {
+        let column_position = table.underlying.find_column_position(&column_name)?;
+        column_positions.push(column_position);
     }
     let mut rows: Vec<ResultSetRow> = Vec::new();
     for row_id in row_ids.into_iter() {
-        let row_to_project = &table.underlying.rows[row_id];
-        let row_fields: Vec<Value> = projection_column_ords.iter().map(|&column_ord| row_to_project.fields[column_ord].clone()).collect();
+        let projected_row = &table.underlying.rows[*row_id];
+        let row_projection: Vec<Value> = column_positions.iter()
+            .map(|&column_position| projected_row.fields[column_position].clone())
+            .collect();
         rows.push(ResultSetRow {
-            fields: row_fields
+            fields: row_projection
         });
     }
     Ok(ResultSet { rows })
+}
+
+fn filter_using_index(filter: &Filter, index: &Index<'_>) -> Result<Vec<usize>, Error> {
+    match filter.filter_type {
+        FilterType::Greater => {
+            filter_using_index_greater_than(&filter.value, index)
+        },
+        FilterType::Equal => {
+            filter_using_index_equal_to(&filter.value, index)
+        }
+    }
+}
+
+fn filter_using_index_greater_than(value: &Value, index: &Index<'_>) -> Result<Vec<usize>, Error> {
+    let mut row_ids: Vec<usize> = Vec::new();
+    let found_idx = match index.sorted_column_values
+        .binary_search_by(|value_in_row| {
+           if *value_in_row.value <= *value {
+               Ordering::Less
+           } else {
+               Ordering::Greater
+           }
+        }) {
+           Err(idx) =>
+               if idx < index.sorted_column_values.len() {
+                   Some(idx)
+               } else {
+                   None
+               }
+           _ => None
+        };
+    if let Some(first_idx_greater_than) = found_idx {
+        row_ids = index.sorted_column_values[first_idx_greater_than..].iter().map(|value_in_row| value_in_row.row_index).collect();
+    }
+    Ok(row_ids)
+}
+
+fn filter_using_index_equal_to(value: &Value, index: &Index<'_>) -> Result<Vec<usize>, Error> {
+    let mut row_ids: Vec<usize> = Vec::new();
+    if let Some(found_row) = index.sorted_column_values
+        .binary_search_by_key(&value, |value_in_row| value_in_row.value).ok()
+        .and_then(|idx| index.sorted_column_values.get(idx)) {
+            row_ids.push(found_row.row_index)
+        };
+    Ok(row_ids)
+}
+
+fn filter_by_scanning(table: &IndexedTable, filter: &Filter) -> Result<Vec<usize>, Error> {
+    let mut row_ids: Vec<usize> = Vec::new();
+    let column_position = table.underlying.find_column_position(&filter.column_name)?;
+    for (row_id, row) in table.underlying.rows.iter().enumerate() {
+        let is_row_matched_by_filter = match filter.filter_type {
+            FilterType::Greater => row.fields[column_position] > filter.value,
+            FilterType::Equal => row.fields[column_position] == filter.value
+        };
+        if is_row_matched_by_filter {
+            row_ids.push(row_id);
+        }
+    }
+    Ok(row_ids)
 }
 
 #[cfg(test)]
@@ -213,7 +227,7 @@ ddd,1,5
         match result {
             Err(e) => assert_eq!(
                 e.to_string(),
-                "Cannot project column column4, it does not exist in the table, existing columns column1, column2, column3"
+                "Cannot find column column4, it does not exist in the table, existing columns column1, column2, column3"
             ),
             Ok(_) => panic!("Error expected"),
         }
@@ -228,7 +242,7 @@ ddd,1,5
         match result {
             Err(e) => assert_eq!(
                 e.to_string(),
-                "Cannot filter by column column4, it does not exist in the table, existing columns column1, column2, column3"
+                "Cannot find column column4, it does not exist in the table, existing columns column1, column2, column3"
             ),
             Ok(_) => panic!("Error expected"),
         }

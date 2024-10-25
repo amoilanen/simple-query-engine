@@ -135,7 +135,16 @@ impl Table {
         Ok(columns)
     }
 
-    pub fn column_names(&self) -> Vec<&str> {
+    pub fn find_column_position(&self, column_name: &str) -> Result<usize, Error> {
+        self.columns.iter()
+            .position(|column| column.name == column_name.to_string())
+            .ok_or_else(|| anyhow!("Cannot find column {}, it does not exist in the table, existing columns {}",
+                column_name,
+                self.column_names().join(", "))
+            )
+    }
+
+    fn column_names(&self) -> Vec<&str> {
         self.columns.iter().map(|column| column.name.as_str()).collect()
     }
 }
