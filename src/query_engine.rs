@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::fmt;
 use anyhow::{Result, Error};
 use crate::table::{IndexedTable, Index};
 use crate::query::{FilterType, Filter, Query};
@@ -6,12 +7,20 @@ use crate::value::Value;
 
 #[derive(Debug, PartialEq)]
 pub struct ResultSetRow {
-    fields: Vec<Value>
+    pub fields: Vec<Value>
+}
+
+impl fmt::Display for ResultSetRow {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let formatted_fields: Vec<String> = self.fields.iter()
+            .map(|field| format!("{}", field)).collect();
+        write!(f, "{}", formatted_fields.join(","))
+    }
 }
 
 #[derive(Debug, PartialEq)]
 pub struct ResultSet {
-    rows: Vec<ResultSetRow>
+    pub rows: Vec<ResultSetRow>
 }
 
 pub fn execute(query: &Query, table: &IndexedTable) -> Result<ResultSet, Error> {

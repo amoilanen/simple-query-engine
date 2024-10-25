@@ -1,9 +1,21 @@
 use std::cmp::Ordering;
+use std::fmt;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Value {
     Integer(u64),
     Text(String)
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Value::Integer(value) =>
+                write!(f, "{}", value),
+            Value::Text(value) =>
+                write!(f, "{}", value)
+        }
+    }
 }
 
 impl Ord for Value {
