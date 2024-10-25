@@ -96,11 +96,23 @@ fn filter_using_index_greater_than(value: &Value, index: &Index<'_>) -> Result<V
 
 fn filter_using_index_equal_to(value: &Value, index: &Index<'_>) -> Result<Vec<usize>, Error> {
     let mut row_ids: Vec<usize> = Vec::new();
-    if let Some(found_row) = index.sorted_column_values
-        .binary_search_by_key(&value, |value_in_row| value_in_row.value).ok()
-        .and_then(|idx| index.sorted_column_values.get(idx)) {
-            row_ids.push(found_row.row_index)
-        };
+    if let Some(found_idx) = index.sorted_column_values
+        .binary_search_by_key(&value, |value_in_row| value_in_row.value).ok() {
+        let mut all_matching_idx = vec![found_idx];
+        let mut current_idx = found_idx - 1;
+        while current_idx > 0 && index.sorted_column_values[current_idx].value == value {
+            all_matching_idx.push(current_idx);
+            current_idx = current_idx - 1;
+        }
+        current_idx = found_idx + 1;
+        while current_idx < index.sorted_column_values.len() && index.sorted_column_values[current_idx].value == value {
+            all_matching_idx.push(current_idx);
+            current_idx = current_idx + 1;
+        }
+        all_matching_idx.iter().for_each(|&matching_idx| {
+            row_ids.push(index.sorted_column_values[matching_idx].row_index);
+        });
+    }
     Ok(row_ids)
 }
 
@@ -255,5 +267,70 @@ ddd,1,5
             ),
             Ok(_) => panic!("Error expected"),
         }
+    }
+
+    #[test]
+    fn should_find_all_rows_when_using_equal_filter() {
+        let input = r#"column1,column2
+a,1
+b,2
+c,3
+d,3
+e,3
+f,4
+"#;
+        let mut reader = ReaderBuilder::new().from_reader(Cursor::new(input));
+        let table = Table::load_from(&mut reader).unwrap();
+        let indexed_table = table.build_indices().unwrap();
+        let query = Query::parse("PROJECT column1 FILTER column2 = 3").unwrap();
+        let result_set = execute(&query, &indexed_table).unwrap();
+        assert_eq!(result_set, ResultSet {
+            rows: vec![
+                ResultSetRow {
+                    fields: vec![Value::Text("d".to_string())]
+                },
+                ResultSetRow {
+                    fields: vec![Value::Text("c".to_string())]
+                },
+                ResultSetRow {
+                    fields: vec![Value::Text("e".to_string())]
+                }
+            ]
+        })
+    }
+
+    #[test]
+    fn should_correctly_handle_duplicate_filter_column_values_for_greater_filter() {
+        let input = r#"column1,column2
+a,1
+b,2
+c,3
+d,3
+e,3
+f,4
+"#;
+        let mut reader = ReaderBuilder::new().from_reader(Cursor::new(input));
+        let table = Table::load_from(&mut reader).unwrap();
+        let indexed_table = table.build_indices().unwrap();
+        let query = Query::parse("PROJECT column1 FILTER column2 > 3").unwrap();
+        let result_set = execute(&query, &indexed_table).unwrap();
+        assert_eq!(result_set, ResultSet {
+            rows: vec![
+                ResultSetRow {
+                    fields: vec![Value::Text("f".to_string())]
+                }
+            ]
+        })
+    }
+
+    #[test]
+    fn should_execute_query_with_two_columns_in_projection_and_equal_filter_matching_no_rows() {
+        let table = load_test_table().unwrap();
+        let indexed_table = table.build_indices().unwrap();
+        let query = Query::parse("PROJECT column1, column2 FILTER column1 = \"hhh\"").unwrap();
+        let result_set = execute(&query, &indexed_table).unwrap();
+        assert_eq!(result_set, ResultSet {
+            rows: Vec::new()
+        })
     }
 }
