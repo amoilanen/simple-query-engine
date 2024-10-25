@@ -21,7 +21,10 @@ pub fn execute(query: &Query, table: &IndexedTable) -> Result<ResultSet, Error> 
     if let Some(filter) = &query.filter {
         let filter_column_ord = table.underlying.columns.iter()
             .position(|column| column.name == filter.column_name)
-            .ok_or_else(|| anyhow!("Cannot filter by column {}, it does not exist in the table, existing columns {:?}", filter.column_name, table.underlying.columns))?;
+            .ok_or_else(|| anyhow!("Cannot filter by column {}, it does not exist in the table, existing columns {}",
+                filter.column_name,
+                table.underlying.column_names().join(", "))
+            )?;
         if let Some(column_index) = table.indices.column_indices.get(&filter.column_name) {
             match filter.filter_type {
                 FilterType::Greater => {
@@ -76,7 +79,10 @@ pub fn execute(query: &Query, table: &IndexedTable) -> Result<ResultSet, Error> 
     for projection_column_name in query.column_names.iter() {
         let projection_column_ord = table.underlying.columns.iter()
             .position(|column| column.name == projection_column_name.to_string())
-            .ok_or_else(|| anyhow!("Cannot project column {}, it does not exist in the table, existing columns {:?}", projection_column_name, table.underlying.columns))?;
+            .ok_or_else(|| anyhow!("Cannot project column {}, it does not exist in the table, existing columns {}",
+                projection_column_name,
+                table.underlying.column_names().join(", "))
+            )?;
         projection_column_ords.push(projection_column_ord);
     }
     let mut rows: Vec<ResultSetRow> = Vec::new();
@@ -97,8 +103,7 @@ mod test {
     use std::io::Cursor;
     use crate::table::Table;
 
-    #[test]
-    fn should_execute_query_with_two_columns_in_projection_and_greater_filter() {
+    fn load_test_table() -> Result<Table, Error> {
         let input = r#"column1,column2,column3
 bbb,3,b
 aaa,1,10
@@ -107,7 +112,12 @@ eee,2,9
 ddd,1,5
 "#;
         let mut reader = ReaderBuilder::new().from_reader(Cursor::new(input));
-        let table: Table = Table::load_from(&mut reader).unwrap();
+        Table::load_from(&mut reader)
+    }
+
+    #[test]
+    fn should_execute_query_with_two_columns_in_projection_and_greater_filter() {
+        let table = load_test_table().unwrap();
         let indexed_table = table.build_indices().unwrap();
         let query = Query::parse("PROJECT column1, column2 FILTER column1 > \"bbb\"").unwrap();
         let result_set = execute(&query, &indexed_table).unwrap();
@@ -126,10 +136,101 @@ ddd,1,5
         })
     }
 
-    //TODO: No values can be found: empty result set is returned
-    //TODO: Two columns in projection and equal filter
-    //TODO: Two columns in projection and no filter
-    //TODO: Single column in projection
-    //TODO: Non-existing column is used in the projection
-    //TODO: Non-existing column is used in the filter
+    #[test]
+    fn should_execute_query_with_two_columns_in_projection_and_equal_filter() {
+        let table = load_test_table().unwrap();
+        let indexed_table = table.build_indices().unwrap();
+        let query = Query::parse("PROJECT column1, column2 FILTER column3 = 9").unwrap();
+        let result_set = execute(&query, &indexed_table).unwrap();
+        assert_eq!(result_set, ResultSet {
+            rows: vec![
+                ResultSetRow {
+                    fields: vec![Value::Text("eee".to_string()), Value::Integer(2)]
+                }
+            ]
+        })
+    }
+
+    #[test]
+    fn should_execute_query_with_two_columns_in_projection_and_no_filter() {
+        let table = load_test_table().unwrap();
+        let indexed_table = table.build_indices().unwrap();
+        let query = Query::parse("PROJECT column1, column2").unwrap();
+        let result_set = execute(&query, &indexed_table).unwrap();
+        assert_eq!(result_set, ResultSet {
+            rows: vec![
+                ResultSetRow {
+                    fields: vec![Value::Text("bbb".to_string()), Value::Integer(3)]
+                },
+                ResultSetRow {
+                    fields: vec![Value::Text("aaa".to_string()), Value::Integer(1)]
+                },
+                ResultSetRow {
+                    fields: vec![Value::Text("ccc".to_string()), Value::Integer(2)]
+                },
+                ResultSetRow {
+                    fields: vec![Value::Text("eee".to_string()), Value::Integer(2)]
+                },
+                ResultSetRow {
+                    fields: vec![Value::Text("ddd".to_string()), Value::Integer(1)]
+                }
+            ]
+        })
+    }
+
+    #[test]
+    fn should_execute_query_with_two_columns_in_projection_and_filter_matching_no_rows() {
+        let table = load_test_table().unwrap();
+        let indexed_table = table.build_indices().unwrap();
+        let query = Query::parse("PROJECT column1, column2 FILTER column1 > \"eee\"").unwrap();
+        let result_set = execute(&query, &indexed_table).unwrap();
+        assert_eq!(result_set, ResultSet {
+            rows: Vec::new()
+        })
+    }
+
+    #[test]
+    fn should_execute_query_with_single_column_in_projection() {
+        let table = load_test_table().unwrap();
+        let indexed_table = table.build_indices().unwrap();
+        let query = Query::parse("PROJECT column1 FILTER column2 > 2").unwrap();
+        let result_set = execute(&query, &indexed_table).unwrap();
+        assert_eq!(result_set, ResultSet {
+            rows: vec![
+                ResultSetRow {
+                    fields: vec![Value::Text("bbb".to_string())]
+                }
+            ]
+        })
+    }
+
+    #[test]
+    fn should_produce_error_when_non_existent_column_is_used_in_projection() {
+        let table = load_test_table().unwrap();
+        let indexed_table = table.build_indices().unwrap();
+        let query = Query::parse("PROJECT column4 FILTER column2 > 2").unwrap();
+        let result = execute(&query, &indexed_table);
+        match result {
+            Err(e) => assert_eq!(
+                e.to_string(),
+                "Cannot project column column4, it does not exist in the table, existing columns column1, column2, column3"
+            ),
+            Ok(_) => panic!("Error expected"),
+        }
+    }
+
+    #[test]
+    fn should_produce_error_when_non_existent_column_is_used_in_filter() {
+        let table = load_test_table().unwrap();
+        let indexed_table = table.build_indices().unwrap();
+        let query = Query::parse("PROJECT column1 FILTER column4 > 2").unwrap();
+        let result = execute(&query, &indexed_table);
+        match result {
+            Err(e) => assert_eq!(
+                e.to_string(),
+                "Cannot filter by column column4, it does not exist in the table, existing columns column1, column2, column3"
+            ),
+            Ok(_) => panic!("Error expected"),
+        }
+    }
 }

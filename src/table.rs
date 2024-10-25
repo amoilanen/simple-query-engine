@@ -134,6 +134,10 @@ impl Table {
         }
         Ok(columns)
     }
+
+    pub fn column_names(&self) -> Vec<&str> {
+        self.columns.iter().map(|column| column.name.as_str()).collect()
+    }
 }
 
 #[cfg(test)]

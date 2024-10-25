@@ -11,4 +11,5 @@
 - Add command line interface to load the data and then run a query
   - Implement REPL style querying after loading the CSV
 - Document how to run and test the engine
+- Revisit which structs and functions should be public and use "pub use" for exposing them
 - Answer the questions in the README.md

@@ -1,5 +1,3 @@
-use std::thread::current;
-
 use anyhow::{anyhow, Context, Error, Result};
 use crate::value::Value;
 
